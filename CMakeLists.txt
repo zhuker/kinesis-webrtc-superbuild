@@ -69,7 +69,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(OPENSSL_SRC_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/openssl")
 set(WEBRTC_SDK_SRC_DIR    "${CMAKE_CURRENT_SOURCE_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c")
 set(JSMN_SRC_DIR          "${CMAKE_CURRENT_SOURCE_DIR}/jsmn")
-set(JSMN_PATCH_FILE       "${WEBRTC_SDK_SRC_DIR}/CMake/Dependencies/libjsmn-add-cmakelists.patch")
 
 # Prefix where OpenSSL (autotools) gets installed.
 set(DEPS_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/deps-install" CACHE PATH
@@ -177,20 +176,10 @@ add_subdirectory(usrsctp)
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/usrsctp/usrsctplib")
 
 # =============================================================================
-# 3. jsmn  (add_subdirectory – needs patch first)
+# 3. jsmn  (built directly – no patch needed)
 # =============================================================================
-if(NOT EXISTS "${JSMN_SRC_DIR}/CMakeLists.txt")
-  execute_process(
-      COMMAND git apply --ignore-whitespace ${JSMN_PATCH_FILE}
-      WORKING_DIRECTORY ${JSMN_SRC_DIR}
-      RESULT_VARIABLE JSMN_PATCH_RESULT
-  )
-  if(NOT JSMN_PATCH_RESULT EQUAL 0)
-    message(WARNING "Failed to apply jsmn patch (may already be applied)")
-  endif()
-endif()
-
-add_subdirectory(jsmn)
+add_library(jsmn STATIC "${JSMN_SRC_DIR}/jsmn.c" "${JSMN_SRC_DIR}/jsmn.h")
+target_include_directories(jsmn PUBLIC "${JSMN_SRC_DIR}")
 
 # =============================================================================
 # 4. libwebsockets  (add_subdirectory)
