@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 project(KinesisWebRTCSuperbuild VERSION 1.0.0 LANGUAGES C CXX)
 
-include(ExternalProject)
-
 # =============================================================================
 # Options
 # =============================================================================
@@ -15,6 +13,7 @@ option(BUILD_TEST            "Build WebRTC SDK tests"                           
 option(BUILD_BENCHMARK       "Build WebRTC SDK benchmarks"                           OFF)
 
 set(BUILD_OPENSSL_PLATFORM "" CACHE STRING "OpenSSL target platform for cross-compilation")
+option(OPENSSL_NO_ASM "Disable OpenSSL assembly optimizations (needed for QEMU)" OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
@@ -45,7 +44,7 @@ if(NPROC EQUAL 0)
 endif()
 
 # =============================================================================
-# 1. OpenSSL  (autotools – no CMakeLists.txt, must use ExternalProject)
+# 1. OpenSSL  (autotools – built at configure time via execute_process)
 # =============================================================================
 if(USE_SYSTEM_OPENSSL)
   find_package(OpenSSL REQUIRED)
@@ -57,43 +56,71 @@ else()
       "Run: git submodule update --init openssl")
   endif()
 
-  set(OPENSSL_EXTRA_FLAGS "")
-  if(BUILD_STATIC_LIBS)
-    set(OPENSSL_EXTRA_FLAGS no-shared no-dso)
+  # OpenSSL is built at configure time (not build time) so that
+  # find_package(OpenSSL) succeeds for downstream add_subdirectory
+  # dependencies (libwebsockets, libsrtp, WebRTC SDK).
+  if(NOT EXISTS "${DEPS_INSTALL_PREFIX}/lib/libssl.a")
+    message(STATUS "Building OpenSSL from submodule source...")
+
+    set(OPENSSL_BUILD_SRC "${CMAKE_BINARY_DIR}/openssl-build")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${OPENSSL_SRC_DIR} ${OPENSSL_BUILD_SRC}
+        RESULT_VARIABLE _result)
+    if(NOT _result EQUAL 0)
+      message(FATAL_ERROR "Failed to copy OpenSSL source")
+    endif()
+
+    set(OPENSSL_EXTRA_FLAGS "")
+    if(BUILD_STATIC_LIBS)
+      list(APPEND OPENSSL_EXTRA_FLAGS no-shared no-dso)
+    endif()
+    if(OPENSSL_NO_ASM)
+      list(APPEND OPENSSL_EXTRA_FLAGS no-asm)
+    endif()
+
+    find_program(MAKE_EXE NAMES make gmake)
+
+    if(BUILD_OPENSSL_PLATFORM AND NOT BUILD_OPENSSL_PLATFORM STREQUAL "")
+      execute_process(
+          COMMAND ./Configure ${OPENSSL_EXTRA_FLAGS} no-async
+                  --prefix=${DEPS_INSTALL_PREFIX} --openssldir=${DEPS_INSTALL_PREFIX}
+                  ${BUILD_OPENSSL_PLATFORM}
+          WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
+          RESULT_VARIABLE _result)
+    else()
+      execute_process(
+          COMMAND ./config ${OPENSSL_EXTRA_FLAGS}
+                  --prefix=${DEPS_INSTALL_PREFIX} --openssldir=${DEPS_INSTALL_PREFIX}
+          WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
+          RESULT_VARIABLE _result)
+    endif()
+    if(NOT _result EQUAL 0)
+      message(FATAL_ERROR "OpenSSL configure failed")
+    endif()
+
+    execute_process(
+        COMMAND ${MAKE_EXE} -j${NPROC}
+        WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
+        RESULT_VARIABLE _result)
+    if(NOT _result EQUAL 0)
+      message(FATAL_ERROR "OpenSSL build failed")
+    endif()
+
+    execute_process(
+        COMMAND ${MAKE_EXE} install_sw
+        WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
+        RESULT_VARIABLE _result)
+    if(NOT _result EQUAL 0)
+      message(FATAL_ERROR "OpenSSL install failed")
+    endif()
+
+    message(STATUS "OpenSSL built and installed to ${DEPS_INSTALL_PREFIX}")
   endif()
 
-  if(BUILD_OPENSSL_PLATFORM AND NOT BUILD_OPENSSL_PLATFORM STREQUAL "")
-    set(OPENSSL_CONFIGURE_CMD
-        ./Configure ${OPENSSL_EXTRA_FLAGS} no-async
-        --prefix=${DEPS_INSTALL_PREFIX} --openssldir=${DEPS_INSTALL_PREFIX}
-        ${BUILD_OPENSSL_PLATFORM}
-        -Wno-nullability-completeness -Wno-expansion-to-defined)
-  else()
-    set(OPENSSL_CONFIGURE_CMD
-        ./config ${OPENSSL_EXTRA_FLAGS}
-        --prefix=${DEPS_INSTALL_PREFIX} --openssldir=${DEPS_INSTALL_PREFIX}
-        -Wno-nullability-completeness -Wno-expansion-to-defined)
-  endif()
-
-  find_program(MAKE_EXE NAMES make gmake)
-  set(OPENSSL_BUILD_SRC "${CMAKE_BINARY_DIR}/ep-openssl/src/openssl-src")
-
-  ExternalProject_Add(ep_openssl
-      DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E copy_directory
-                        ${OPENSSL_SRC_DIR} ${OPENSSL_BUILD_SRC}
-      SOURCE_DIR        ${OPENSSL_BUILD_SRC}
-      PREFIX            ${CMAKE_BINARY_DIR}/ep-openssl
-      BUILD_IN_SOURCE   TRUE
-      CONFIGURE_COMMAND ${OPENSSL_CONFIGURE_CMD}
-      BUILD_COMMAND     ${MAKE_EXE} -j${NPROC}
-      INSTALL_COMMAND   ${MAKE_EXE} install_sw
-      TEST_COMMAND      ""
-      UPDATE_COMMAND    ""
-  )
-
-  # Make find_package(OpenSSL) find our build.
   set(OPENSSL_ROOT_DIR ${DEPS_INSTALL_PREFIX} CACHE PATH "" FORCE)
-  set(OPENSSL_INCLUDE_DIR ${DEPS_INSTALL_PREFIX}/include CACHE PATH "" FORCE)
+  find_package(OpenSSL REQUIRED)
+  message(STATUS "Using submodule OpenSSL: ${OPENSSL_VERSION}")
 endif()
 
 # =============================================================================
@@ -147,10 +174,6 @@ set(LWS_WITH_ZLIB           OFF CACHE BOOL "" FORCE)
 set(LWS_HAVE_EVENTFD        OFF CACHE BOOL "" FORCE)
 set(LWS_IPV6                ON  CACHE BOOL "" FORCE)
 set(DISABLE_WERROR          ON  CACHE BOOL "" FORCE)
-
-if(NOT USE_SYSTEM_OPENSSL)
-  set(LWS_OPENSSL_INCLUDE_DIRS ${DEPS_INSTALL_PREFIX}/include CACHE PATH "" FORCE)
-endif()
 
 add_subdirectory(libwebsockets)
 
@@ -236,3 +259,9 @@ set(ENABLE_DATA_CHANNEL   ${ENABLE_DATA_CHANNEL}   CACHE BOOL "" FORCE)
 set(ENABLE_KVS_THREADPOOL ${ENABLE_KVS_THREADPOOL} CACHE BOOL "" FORCE)
 
 add_subdirectory(amazon-kinesis-video-streams-webrtc-sdk-c)
+
+# On Linux, libm is not linked implicitly (unlike macOS).
+# kvsWebrtcClient uses math functions (sqrt, pow) but doesn't link -lm.
+if(UNIX AND NOT APPLE)
+  target_link_libraries(kvsWebrtcClient PUBLIC m)
+endif()

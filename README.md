@@ -48,6 +48,15 @@ cmake ..
 | `BUILD_TEST` | `OFF` | Build WebRTC SDK tests |
 | `BUILD_BENCHMARK` | `OFF` | Build WebRTC SDK benchmarks |
 | `BUILD_OPENSSL_PLATFORM` | `""` | OpenSSL target platform for cross-compilation |
+| `OPENSSL_NO_ASM` | `OFF` | Disable OpenSSL assembly optimizations (needed for QEMU) |
+
+## Docker Build (Linux/amd64)
+
+```bash
+docker build --platform=linux/amd64 -t kinesis-webrtc-superbuild .
+```
+
+Sample binaries end up in `build-linux-amd64/amazon-kinesis-video-streams-webrtc-sdk-c/samples/` inside the image.
 
 ## Output
 
@@ -75,10 +84,10 @@ Sample binaries are built to `build/amazon-kinesis-video-streams-webrtc-sdk-c/sa
 
 ## Architecture
 
-All CMake-based dependencies are integrated via `add_subdirectory`. OpenSSL uses `ExternalProject_Add` since it has no CMakeLists.txt (autotools-based).
+All CMake-based dependencies are integrated via `add_subdirectory`. OpenSSL is built at configure time via `execute_process` since it has no CMakeLists.txt (autotools-based). When `USE_SYSTEM_OPENSSL=ON`, the system OpenSSL is used via `find_package`.
 
 ```
-OpenSSL (ExternalProject)
+OpenSSL (execute_process at configure time)
   |
 usrsctp -> jsmn -> libwebsockets -> libsrtp -> kvspic -> producer-c -> WebRTC SDK
 ```
