@@ -30,3 +30,7 @@
 	path = amazon-kinesis-video-streams-webrtc-sdk-c
 	url = https://github.com/zhuker/amazon-kinesis-video-streams-webrtc-sdk-c.git
 	branch = gcc-custom-signaling
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest.git
+	branch = release-1.12.1

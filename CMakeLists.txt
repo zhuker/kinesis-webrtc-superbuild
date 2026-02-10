@@ -11,6 +11,7 @@ option(ENABLE_DATA_CHANNEL   "Enable data channel support in WebRTC SDK"        
 option(ENABLE_KVS_THREADPOOL "Enable KVS thread pool in signaling"                   OFF)
 option(BUILD_TEST            "Build WebRTC SDK tests"                                OFF)
 option(BUILD_BENCHMARK       "Build WebRTC SDK benchmarks"                           OFF)
+option(ENABLE_AWS_SDK_IN_TESTS "Enable AWS SDK in tests (requires AWS C++ SDK)"      OFF)
 
 set(BUILD_OPENSSL_PLATFORM "" CACHE STRING "OpenSSL target platform for cross-compilation")
 option(OPENSSL_NO_ASM "Disable OpenSSL assembly optimizations (needed for QEMU)" OFF)
@@ -57,6 +58,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   list(GET _ndk_toolchain_bins 0 _ndk_bin)
   set(ENV{PATH} "${_ndk_bin}:$ENV{PATH}")
   message(STATUS "Android NDK for OpenSSL: $ENV{ANDROID_NDK_HOME}")
+
+  # kvspic uses ANDROID_BUILD to guard pthread_cancel (unavailable on Android).
+  add_definitions(-DANDROID_BUILD)
 endif()
 
 # Ensure all static libraries are built with -fPIC so they can be linked
@@ -232,8 +236,56 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/libsrtp/crypto/include/crypto_types.h" DE
 include_directories("${CMAKE_BINARY_DIR}/srtp-include")
 
 # =============================================================================
-# 6. kvspic  (add_subdirectory)
+# 6. googletest  (add_subdirectory – only when BUILD_TEST is ON)
 # =============================================================================
+# Must come before kvspic and WebRTC SDK so their tests can find GTest.
+if(BUILD_TEST)
+  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  add_subdirectory(googletest)
+
+  # kvspic and the SDK call find_package(GTest REQUIRED).  Provide a custom
+  # FindGTest.cmake that recognises the targets already created above,
+  # overriding CMake's built-in FindGTest module.
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/cmake-modules")
+  file(WRITE "${CMAKE_BINARY_DIR}/cmake-modules/FindGTest.cmake"
+"# Custom FindGTest – targets provided by add_subdirectory(googletest)
+set(GTEST_FOUND TRUE)
+set(GTest_FOUND TRUE)
+set(GTEST_INCLUDE_DIRS \"${CMAKE_CURRENT_SOURCE_DIR}/googletest/googletest/include\")
+set(GTEST_INCLUDE_DIR  \"${CMAKE_CURRENT_SOURCE_DIR}/googletest/googletest/include\")
+set(GTEST_LIBRARIES    gtest)
+set(GTEST_MAIN_LIBRARIES gtest_main)
+set(GTEST_LIBRARY      gtest)
+set(GTEST_MAIN_LIBRARY gtest_main)
+if(NOT TARGET GTest::GTest)
+  add_library(GTest::GTest ALIAS gtest)
+endif()
+if(NOT TARGET GTest::Main)
+  add_library(GTest::Main ALIAS gtest_main)
+endif()
+")
+  list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_BINARY_DIR}/cmake-modules")
+
+  # The WebRTC SDK's tst/CMakeLists.txt uses find_package(GTest PATHS ...)
+  # which triggers config mode.  Provide a GTestConfig.cmake too.
+  file(WRITE "${CMAKE_BINARY_DIR}/cmake-modules/GTestConfig.cmake"
+"set(GTest_FOUND TRUE)
+set(GTEST_FOUND TRUE)
+")
+  file(WRITE "${CMAKE_BINARY_DIR}/cmake-modules/GTestConfigVersion.cmake"
+"set(PACKAGE_VERSION \"1.12.1\")
+set(PACKAGE_VERSION_COMPATIBLE TRUE)
+")
+  set(GTest_DIR "${CMAKE_BINARY_DIR}/cmake-modules" CACHE PATH "" FORCE)
+endif()
+
+# =============================================================================
+# 7. kvspic  (add_subdirectory)
+# =============================================================================
+# Disable BUILD_DEPENDENCIES globally – all deps are provided by this superbuild.
+set(BUILD_DEPENDENCIES FALSE CACHE BOOL "" FORCE)
+
 # Android's bionic libc includes clock_gettime directly – there is no separate
 # librt.  kvspic's CMakeLists.txt does `target_link_libraries(kvspic rt)` on
 # UNIX && !APPLE, which would fail on Android.  Providing an empty INTERFACE
@@ -245,7 +297,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   endif()
 endif()
 
+# Disable tests for kvspic (its tests use pthread_cancel which Android lacks).
+# We only want the WebRTC SDK tests.  Save and restore BUILD_TEST around kvspic.
+set(_SAVE_BUILD_TEST ${BUILD_TEST})
+set(BUILD_TEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(amazon-kinesis-video-streams-pic)
+set(BUILD_TEST ${_SAVE_BUILD_TEST} CACHE BOOL "" FORCE)
 
 # Expose kvspic include directories at root level so producer-c and WebRTC SDK
 # can find headers like com/amazonaws/kinesis/video/client/Include.h.
@@ -304,6 +361,15 @@ add_subdirectory(amazon-kinesis-video-streams-webrtc-sdk-c)
 
 # On Linux, libm is not linked implicitly (unlike macOS).
 # kvsWebrtcClient uses math functions (sqrt, pow) but doesn't link -lm.
+# On Linux/Android, libm is not linked implicitly (unlike macOS).
+# kvsWebrtcClient uses math functions (sqrt, pow) but doesn't link -lm.
 if(UNIX AND NOT APPLE)
   target_link_libraries(kvsWebrtcClient PUBLIC m)
+endif()
+
+# Android requires -llog for __android_log_print (enabled by ANDROID_BUILD).
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  target_link_libraries(kvspic log)
+  target_link_libraries(kvspicUtils log)
+  target_link_libraries(kvsCommonLws log)
 endif()
