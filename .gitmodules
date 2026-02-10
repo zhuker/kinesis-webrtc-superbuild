@@ -1,0 +1,32 @@
+[submodule "openssl"]
+	path = openssl
+	url = https://github.com/openssl/openssl.git
+	branch = OpenSSL_1_1_1t
+[submodule "libwebsockets"]
+	path = libwebsockets
+	url = https://github.com/warmcat/libwebsockets.git
+	branch = v4.3.5
+[submodule "libsrtp"]
+	path = libsrtp
+	url = https://github.com/cisco/libsrtp.git
+	branch = main
+[submodule "usrsctp"]
+	path = usrsctp
+	url = https://github.com/sctplab/usrsctp.git
+	branch = master
+[submodule "jsmn"]
+	path = jsmn
+	url = https://github.com/zserge/jsmn.git
+	branch = v1.0.0
+[submodule "amazon-kinesis-video-streams-pic"]
+	path = amazon-kinesis-video-streams-pic
+	url = https://github.com/awslabs/amazon-kinesis-video-streams-pic.git
+	branch = v1.2.0
+[submodule "amazon-kinesis-video-streams-producer-c"]
+	path = amazon-kinesis-video-streams-producer-c
+	url = https://github.com/awslabs/amazon-kinesis-video-streams-producer-c.git
+	branch = v1.6.0
+[submodule "amazon-kinesis-video-streams-webrtc-sdk-c"]
+	path = amazon-kinesis-video-streams-webrtc-sdk-c
+	url = https://github.com/zhuker/amazon-kinesis-video-streams-webrtc-sdk-c.git
+	branch = master
