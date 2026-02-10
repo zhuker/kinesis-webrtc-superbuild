@@ -21,6 +21,44 @@ endif()
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
+# =============================================================================
+# Android cross-compilation
+# =============================================================================
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  # Auto-set OpenSSL target platform from ANDROID_ABI.
+  if(NOT BUILD_OPENSSL_PLATFORM OR BUILD_OPENSSL_PLATFORM STREQUAL "")
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+      set(BUILD_OPENSSL_PLATFORM "android-arm64" CACHE STRING "" FORCE)
+    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+      set(BUILD_OPENSSL_PLATFORM "android-arm" CACHE STRING "" FORCE)
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+      set(BUILD_OPENSSL_PLATFORM "android-x86_64" CACHE STRING "" FORCE)
+    elseif(ANDROID_ABI STREQUAL "x86")
+      set(BUILD_OPENSSL_PLATFORM "android-x86" CACHE STRING "" FORCE)
+    endif()
+  endif()
+
+  # OpenSSL's Configure for Android needs ANDROID_NDK_HOME to find the
+  # NDK toolchain. Try several sources for the NDK path.
+  if(CMAKE_ANDROID_NDK)
+    set(ENV{ANDROID_NDK_HOME} "${CMAKE_ANDROID_NDK}")
+  elseif(ANDROID_NDK)
+    set(ENV{ANDROID_NDK_HOME} "${ANDROID_NDK}")
+  elseif(CMAKE_TOOLCHAIN_FILE)
+    # Derive from toolchain path: <NDK>/build/cmake/android.toolchain.cmake
+    get_filename_component(_ndk "${CMAKE_TOOLCHAIN_FILE}" DIRECTORY)
+    get_filename_component(_ndk "${_ndk}" DIRECTORY)
+    get_filename_component(_ndk "${_ndk}" DIRECTORY)
+    set(ENV{ANDROID_NDK_HOME} "${_ndk}")
+  endif()
+  # OpenSSL's Configure checks if `clang` on PATH belongs to the NDK.
+  # Add the NDK toolchain bin directory to PATH so it finds NDK clang.
+  file(GLOB _ndk_toolchain_bins "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/*/bin")
+  list(GET _ndk_toolchain_bins 0 _ndk_bin)
+  set(ENV{PATH} "${_ndk_bin}:$ENV{PATH}")
+  message(STATUS "Android NDK for OpenSSL: $ENV{ANDROID_NDK_HOME}")
+endif()
+
 # Ensure all static libraries are built with -fPIC so they can be linked
 # into shared libraries (kvsCommonLws, kvsWebrtcClient, etc.).
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -119,6 +157,9 @@ else()
   endif()
 
   set(OPENSSL_ROOT_DIR ${DEPS_INSTALL_PREFIX} CACHE PATH "" FORCE)
+  # When cross-compiling (e.g. Android), the toolchain restricts find_library
+  # to the sysroot. Add our install prefix so find_package(OpenSSL) works.
+  list(APPEND CMAKE_FIND_ROOT_PATH ${DEPS_INSTALL_PREFIX})
   find_package(OpenSSL REQUIRED)
   message(STATUS "Using submodule OpenSSL: ${OPENSSL_VERSION}")
 endif()
@@ -173,6 +214,7 @@ set(LWS_HAVE_PTHREAD_H      ON  CACHE BOOL "" FORCE)
 set(LWS_WITH_ZLIB           OFF CACHE BOOL "" FORCE)
 set(LWS_HAVE_EVENTFD        OFF CACHE BOOL "" FORCE)
 set(LWS_IPV6                ON  CACHE BOOL "" FORCE)
+set(LWS_WITH_EXPORT_LWSTARGETS OFF CACHE BOOL "" FORCE)
 set(DISABLE_WERROR          ON  CACHE BOOL "" FORCE)
 
 add_subdirectory(libwebsockets)
@@ -203,6 +245,17 @@ include_directories("${CMAKE_BINARY_DIR}/srtp-include")
 # =============================================================================
 # 6. kvspic  (add_subdirectory)
 # =============================================================================
+# Android's bionic libc includes clock_gettime directly – there is no separate
+# librt.  kvspic's CMakeLists.txt does `target_link_libraries(kvspic rt)` on
+# UNIX && !APPLE, which would fail on Android.  Providing an empty INTERFACE
+# target named "rt" makes CMake resolve the name as a target (no-op) instead
+# of passing -lrt to the linker.
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  if(NOT TARGET rt)
+    add_library(rt INTERFACE)
+  endif()
+endif()
+
 add_subdirectory(amazon-kinesis-video-streams-pic)
 
 # Expose kvspic include directories at root level so producer-c and WebRTC SDK

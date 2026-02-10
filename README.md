@@ -50,6 +50,27 @@ cmake ..
 | `BUILD_OPENSSL_PLATFORM` | `""` | OpenSSL target platform for cross-compilation |
 | `OPENSSL_NO_ASM` | `OFF` | Disable OpenSSL assembly optimizations (needed for QEMU) |
 
+## Android Build
+
+Requires the Android NDK. Set `NDK` to your NDK path:
+
+```bash
+NDK=$HOME/Library/Android/sdk/ndk/25.2.9519653
+
+cmake -B build-android-arm64 \
+  -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-26 \
+  -DBUILD_SAMPLE=OFF \
+  -DBUILD_STATIC_LIBS=ON
+
+cmake --build build-android-arm64 -j$(nproc)
+```
+
+OpenSSL is automatically cross-compiled for the target ABI. The `BUILD_OPENSSL_PLATFORM` is auto-detected from `ANDROID_ABI` (e.g. `arm64-v8a` maps to `android-arm64`).
+
+Supported ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`.
+
 ## Docker Build (Linux/amd64)
 
 ```bash
