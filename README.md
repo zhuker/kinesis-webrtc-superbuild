@@ -22,6 +22,49 @@ If you already cloned without `--recurse-submodules`:
 git submodule update --init
 ```
 
+### Updating when both local and remote have changes
+
+If you have local (uncommitted) modifications inside a submodule and the remote
+branch also has new commits:
+
+```bash
+cd amazon-kinesis-video-streams-webrtc-sdk-c
+git stash                                   # save local changes
+git fetch origin
+git reset --hard origin/gcc-custom-signaling # update to remote
+git stash pop                               # re-apply local changes
+cd ..
+git add amazon-kinesis-video-streams-webrtc-sdk-c
+```
+
+If the remote already includes your fixes, drop the stash instead:
+
+```bash
+git stash drop
+```
+
+If `git stash pop` produces conflicts, resolve them, then `git stash drop`.
+
+### Updating after a force push
+
+If a submodule's remote branch was force-pushed (rebased/squashed), a regular
+`git submodule update` will fail. Reset the submodule to the commit recorded in
+the parent repo:
+
+```bash
+git submodule update --init --force
+```
+
+To pull the latest from a submodule's remote branch and update the parent repo:
+
+```bash
+cd amazon-kinesis-video-streams-webrtc-sdk-c
+git fetch origin
+git reset --hard origin/gcc-custom-signaling
+cd ..
+git add amazon-kinesis-video-streams-webrtc-sdk-c
+```
+
 ## Build
 
 ```bash

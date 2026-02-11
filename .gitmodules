@@ -20,8 +20,8 @@
 	branch = v1.0.0
 [submodule "amazon-kinesis-video-streams-pic"]
 	path = amazon-kinesis-video-streams-pic
-	url = https://github.com/awslabs/amazon-kinesis-video-streams-pic.git
-	branch = v1.2.0
+	url = https://github.com/zhuker/amazon-kinesis-video-streams-pic.git
+	branch = android-fixes
 [submodule "amazon-kinesis-video-streams-producer-c"]
 	path = amazon-kinesis-video-streams-producer-c
 	url = https://github.com/awslabs/amazon-kinesis-video-streams-producer-c.git

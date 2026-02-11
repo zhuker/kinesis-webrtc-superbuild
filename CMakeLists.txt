@@ -59,8 +59,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   set(ENV{PATH} "${_ndk_bin}:$ENV{PATH}")
   message(STATUS "Android NDK for OpenSSL: $ENV{ANDROID_NDK_HOME}")
 
-  # kvspic uses ANDROID_BUILD to guard pthread_cancel (unavailable on Android).
-  add_definitions(-DANDROID_BUILD)
 endif()
 
 # Ensure all static libraries are built with -fPIC so they can be linked
@@ -365,11 +363,4 @@ add_subdirectory(amazon-kinesis-video-streams-webrtc-sdk-c)
 # kvsWebrtcClient uses math functions (sqrt, pow) but doesn't link -lm.
 if(UNIX AND NOT APPLE)
   target_link_libraries(kvsWebrtcClient PUBLIC m)
-endif()
-
-# Android requires -llog for __android_log_print (enabled by ANDROID_BUILD).
-if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-  target_link_libraries(kvspic log)
-  target_link_libraries(kvspicUtils log)
-  target_link_libraries(kvsCommonLws log)
 endif()

@@ -16,11 +16,27 @@
 #   sdkmanager "system-images;android-26;default;arm64-v8a"
 #   avdmanager create avd -n test-android26-arm64 \
 #     -k "system-images;android-26;default;arm64-v8a" -f <<< "no"
+#
+# Device directory layout:
+#   /data/local/tmp/
+#   ├── samples/              # sample data (h264/h265/opus frames)
+#   │   ├── h264SampleFrames/
+#   │   ├── h265SampleFrames/
+#   │   ├── opusSampleFrames/
+#   │   ├── girH264/
+#   │   └── bbbH264/
+#   ├── tst/
+#   │   └── webrtc_client_test
+#   ├── run-tests-on-device.sh  # test runner (pushed by this script)
+#   ├── test-output.log         # test output from last run
+#   ├── libkvsCommonLws.so
+#   └── libwebsockets.so
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build-android-arm64"
+SAMPLES_SRC="${SCRIPT_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/samples"
 
 # Android SDK paths
 ANDROID_SDK="${ANDROID_HOME:-${HOME}/Library/Android/sdk}"
@@ -34,11 +50,8 @@ AVD_NAME="test-android26-arm64"
 SYSTEM_IMAGE="system-images;android-26;default;arm64-v8a"
 DEVICE_DIR="/data/local/tmp"
 
-# Default test filter: unit tests that don't require network/AWS credentials
-DEFAULT_FILTER="StunApiTest.*:StunFunctionalityTest.*:SdpApiTest.*:RtpFunctionalityTest.*:RtcpFunctionalityTest.*:SrtpApiTest.*:IceConfigParsingTest.*:GccFunctionalityTest.*:JitterBufferFunctionalityTest.*:PacerFunctionalityTest.*:RollingBufferFunctionalityTest.*:IOBufferFunctionalityTest.*:CustomEndpointTest.*:DtlsApiTest.*:DtlsFunctionalityTest.*:DataChannelApiTest.*:DataChannelFunctionalityTest.*:MetricsApiTest.*:H264JitterBufferIntegrationTest.*:RtpRollingBufferFunctionalityTest.*"
-
 SKIP_BUILD=false
-GTEST_FILTER="${DEFAULT_FILTER}"
+GTEST_FILTER="*"
 SERIAL=""
 
 while [[ $# -gt 0 ]]; do
@@ -46,7 +59,6 @@ while [[ $# -gt 0 ]]; do
         --skip-build) SKIP_BUILD=true; shift ;;
         --filter)     GTEST_FILTER="$2"; shift 2 ;;
         --serial)     SERIAL="$2"; shift 2 ;;
-        --all)        GTEST_FILTER="*"; shift ;;
         *)            echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -125,15 +137,39 @@ fi
 
 echo "=== Using device: ${SERIAL} ==="
 
-# ── Push binaries ──────────────────────────────────────────────────────
-echo "=== Pushing test binaries ==="
-adb_cmd push "${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test" "${DEVICE_DIR}/"
+# ── Push binaries and data ────────────────────────────────────────────
+echo "=== Pushing shared libraries ==="
 adb_cmd push "${BUILD_DIR}/amazon-kinesis-video-streams-producer-c/libkvsCommonLws.so" "${DEVICE_DIR}/"
 adb_cmd push "${BUILD_DIR}/libwebsockets/lib/libwebsockets.so" "${DEVICE_DIR}/"
-adb_cmd shell chmod +x "${DEVICE_DIR}/webrtc_client_test"
+
+echo "=== Pushing test binary ==="
+adb_cmd shell mkdir -p "${DEVICE_DIR}/tst"
+adb_cmd push "${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test" "${DEVICE_DIR}/tst/"
+adb_cmd shell chmod +x "${DEVICE_DIR}/tst/webrtc_client_test"
+
+echo "=== Pushing sample data ==="
+adb_cmd shell mkdir -p "${DEVICE_DIR}/samples"
+for dir in h264SampleFrames h265SampleFrames opusSampleFrames girH264 bbbH264; do
+    if [[ -d "${SAMPLES_SRC}/${dir}" ]]; then
+        echo "  ${dir}/"
+        adb_cmd push "${SAMPLES_SRC}/${dir}" "${DEVICE_DIR}/samples/"
+    fi
+done
 
 # ── Run tests ──────────────────────────────────────────────────────────
-echo "=== Running tests ==="
-echo "Filter: ${GTEST_FILTER}"
+echo "=== Pushing test runner script ==="
+adb_cmd push "${SCRIPT_DIR}/run-tests-on-device.sh" "${DEVICE_DIR}/"
+adb_cmd shell chmod +x "${DEVICE_DIR}/run-tests-on-device.sh"
+
 echo ""
-adb_cmd shell "LD_LIBRARY_PATH=${DEVICE_DIR} ${DEVICE_DIR}/webrtc_client_test --gtest_filter='${GTEST_FILTER}'"
+echo "=== Running tests (log: ${DEVICE_DIR}/test-output.log) ==="
+echo ""
+adb_cmd shell "${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'"
+TEST_EXIT=$?
+
+echo ""
+echo "=== Pulling test log ==="
+adb_cmd pull "${DEVICE_DIR}/test-output.log" "${BUILD_DIR}/test-output.log"
+echo "Log saved to ${BUILD_DIR}/test-output.log"
+
+exit $TEST_EXIT
