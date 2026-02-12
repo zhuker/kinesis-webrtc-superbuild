@@ -18,7 +18,12 @@ RUN cp -r openssl /tmp/openssl-build && \
     make -j$(nproc) && \
     make install_sw
 
-RUN cmake -B build-linux-amd64 \
+RUN cmake -B build-linux-arm64 \
     -DUSE_SYSTEM_OPENSSL=ON \
-    -DOPENSSL_ROOT_DIR=/opt/deps
-RUN cmake --build build-linux-amd64 -j2
+    -DOPENSSL_ROOT_DIR=/opt/deps \
+    -DBUILD_TEST=ON
+RUN cmake --build build-linux-arm64 -j$(nproc)
+
+ENV LD_LIBRARY_PATH=/src/build-linux-arm64/amazon-kinesis-video-streams-webrtc-sdk-c:/src/build-linux-arm64/amazon-kinesis-video-streams-producer-c:/opt/deps/lib
+WORKDIR /src/amazon-kinesis-video-streams-webrtc-sdk-c/tst
+CMD ["/src/build-linux-arm64/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test"]
