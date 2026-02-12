@@ -80,7 +80,8 @@ if [[ "$SKIP_BUILD" == false ]]; then
         -DANDROID_PLATFORM=android-26 \
         -DBUILD_SAMPLE=OFF \
         -DBUILD_STATIC_LIBS=ON \
-        -DBUILD_TEST=ON
+        -DBUILD_TEST=ON \
+        -DENABLE_SIGNALING=OFF
     cmake --build "$BUILD_DIR" -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
 fi
 
@@ -125,12 +126,12 @@ ensure_emulator() {
 
 # If no serial specified, try to auto-detect emulator
 if [[ -z "$SERIAL" ]]; then
-    EMU_SERIAL=$("$ADB" devices | grep "^emulator-" | head -1 | awk '{print $1}')
+    EMU_SERIAL=$("$ADB" devices | grep "^emulator-" | head -1 | awk '{print $1}' || true)
     if [[ -n "$EMU_SERIAL" ]]; then
         SERIAL="$EMU_SERIAL"
     else
         ensure_emulator
-        EMU_SERIAL=$("$ADB" devices | grep "^emulator-" | head -1 | awk '{print $1}')
+        EMU_SERIAL=$("$ADB" devices | grep "^emulator-" | head -1 | awk '{print $1}' || true)
         SERIAL="$EMU_SERIAL"
     fi
 fi
