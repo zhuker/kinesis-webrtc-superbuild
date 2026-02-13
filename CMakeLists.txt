@@ -16,6 +16,7 @@ option(ENABLE_AWS_SDK_IN_TESTS "Enable AWS SDK in tests (requires AWS C++ SDK)" 
 
 set(BUILD_OPENSSL_PLATFORM "" CACHE STRING "OpenSSL target platform for cross-compilation")
 option(OPENSSL_NO_ASM "Disable OpenSSL assembly optimizations (needed for QEMU)" OFF)
+option(BUILD_ANDROID_JNI_TEST "Build Android JNI test library instead of test executable" OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
@@ -96,13 +97,15 @@ else()
       "Run: git submodule update --init openssl")
   endif()
 
+  find_program(MAKE_EXE NAMES make gmake)
+  set(OPENSSL_BUILD_SRC "${CMAKE_BINARY_DIR}/openssl-build")
+
   # OpenSSL is built at configure time (not build time) so that
   # find_package(OpenSSL) succeeds for downstream add_subdirectory
   # dependencies (libwebsockets, libsrtp, WebRTC SDK).
   if(NOT EXISTS "${DEPS_INSTALL_PREFIX}/lib/libssl.a")
     message(STATUS "Building OpenSSL from submodule source...")
 
-    set(OPENSSL_BUILD_SRC "${CMAKE_BINARY_DIR}/openssl-build")
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${OPENSSL_SRC_DIR} ${OPENSSL_BUILD_SRC}
@@ -118,8 +121,6 @@ else()
     if(OPENSSL_NO_ASM)
       list(APPEND OPENSSL_EXTRA_FLAGS no-asm)
     endif()
-
-    find_program(MAKE_EXE NAMES make gmake)
 
     if(BUILD_OPENSSL_PLATFORM AND NOT BUILD_OPENSSL_PLATFORM STREQUAL "")
       execute_process(
@@ -157,6 +158,21 @@ else()
 
     message(STATUS "OpenSSL built and installed to ${DEPS_INSTALL_PREFIX}")
   endif()
+
+  # Register OpenSSL installed libs as build-time outputs so ninja can
+  # regenerate them if deleted (e.g. by Gradle clean).  `make install_sw`
+  # also installs headers to deps-install/include/openssl/.
+  # add_dependencies (at end of file) ensures all targets that compile
+  # against OpenSSL headers wait for this to complete.
+  add_custom_command(
+      OUTPUT "${DEPS_INSTALL_PREFIX}/lib/libssl.a"
+             "${DEPS_INSTALL_PREFIX}/lib/libcrypto.a"
+      COMMAND ${MAKE_EXE} install_sw
+      WORKING_DIRECTORY "${OPENSSL_BUILD_SRC}"
+      COMMENT "Installing OpenSSL to ${DEPS_INSTALL_PREFIX}...")
+  add_custom_target(openssl_install ALL
+      DEPENDS "${DEPS_INSTALL_PREFIX}/lib/libssl.a"
+              "${DEPS_INSTALL_PREFIX}/lib/libcrypto.a")
 
   set(OPENSSL_ROOT_DIR ${DEPS_INSTALL_PREFIX} CACHE PATH "" FORCE)
   # When cross-compiling (e.g. Android), the toolchain restricts find_library
@@ -373,4 +389,81 @@ add_subdirectory(amazon-kinesis-video-streams-webrtc-sdk-c)
 # kvsWebrtcClient uses math functions (sqrt, pow) but doesn't link -lm.
 if(UNIX AND NOT APPLE)
   target_link_libraries(kvsWebrtcClient PUBLIC m)
+endif()
+
+# =============================================================================
+# 9. Android JNI Test Library  (shared lib for instrumented tests)
+# =============================================================================
+if(BUILD_ANDROID_JNI_TEST AND CMAKE_SYSTEM_NAME STREQUAL "Android" AND BUILD_TEST)
+  set(WEBRTC_TST_DIR "${WEBRTC_SDK_SRC_DIR}/tst")
+  file(GLOB JNI_TEST_SOURCES "${WEBRTC_TST_DIR}/*.cpp")
+
+  # Exclude original main.cpp – replaced by jni_bridge.cpp
+  list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+
+  # Same signaling filters as tst/CMakeLists.txt
+  if(NOT ENABLE_SIGNALING)
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*Signaling.*\\.cpp")
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*IngestionFunctionalityTests\\.cpp")
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*CustomEndpointTest\\.cpp")
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*DualStackEndpointsTest\\.cpp")
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*TurnConnectionFunctionalityTest\\.cpp")
+    list(FILTER JNI_TEST_SOURCES EXCLUDE REGEX ".*IceConfigParsingTest\\.cpp")
+  endif()
+
+  add_library(webrtc_test_jni SHARED
+    ${JNI_TEST_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/android-test-app/jni_bridge.cpp")
+
+  # The SDK uses include_directories() (directory-scoped), which doesn't propagate
+  # to targets outside its add_subdirectory scope.  Add them explicitly.
+  # The gtest-android-override dir is listed BEFORE the real gtest include path so
+  # our wrapper gtest/gtest.h is found first; it #include_next's the real header
+  # and then redefines EXPECT_DEATH/ASSERT_DEATH to no-ops (death tests use fork()
+  # which crashes the JVM in JNI context).
+  target_include_directories(webrtc_test_jni BEFORE PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/android-test-app/gtest-android-override")
+  target_include_directories(webrtc_test_jni PRIVATE
+    "${WEBRTC_SDK_SRC_DIR}"
+    "${WEBRTC_SDK_SRC_DIR}/src/include"
+    "${DEPS_INSTALL_PREFIX}/include")
+  target_compile_definitions(webrtc_test_jni PRIVATE INSTRUMENTED_ALLOCATORS KVS_USE_OPENSSL)
+
+  # Resolve gtest target name (same logic as tst/CMakeLists.txt)
+  set(_JNI_GTEST GTest::gtest)
+  if(TARGET GTest::GTest)
+    set(_JNI_GTEST GTest::GTest)
+  endif()
+
+  if(ENABLE_SIGNALING)
+    target_link_libraries(webrtc_test_jni
+      kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws
+      ${OPENSSL_CRYPTO_LIBRARY} kvspicUtils ${_JNI_GTEST} log)
+  else()
+    target_link_libraries(webrtc_test_jni
+      kvsWebrtcClient ${OPENSSL_CRYPTO_LIBRARY} kvspicUtils ${_JNI_GTEST} log)
+  endif()
+endif()
+
+# =============================================================================
+# Build-order: OpenSSL install must complete before any target that uses its
+# headers or libraries.  add_dependencies is NOT transitive through
+# target_link_libraries, so every target that directly #includes OpenSSL
+# headers needs an explicit dependency.
+# =============================================================================
+if(TARGET openssl_install)
+  add_dependencies(srtp2 openssl_install)
+  add_dependencies(kvsWebrtcClient openssl_install)
+  if(TARGET websockets)
+    add_dependencies(websockets openssl_install)
+  endif()
+  if(TARGET webrtc_client_test)
+    add_dependencies(webrtc_client_test openssl_install)
+  endif()
+  if(TARGET webrtc_test_jni)
+    add_dependencies(webrtc_test_jni openssl_install)
+  endif()
+  if(TARGET kvsCommonLws)
+    add_dependencies(kvsCommonLws openssl_install)
+  endif()
 endif()

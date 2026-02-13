@@ -28,7 +28,6 @@
 #   ├── tst/
 #   │   └── webrtc_client_test
 #   ├── run-tests-on-device.sh  # test runner (pushed by this script)
-#   ├── test-output.log         # test output from last run
 #   ├── libkvsCommonLws.so
 #   └── libwebsockets.so
 
@@ -153,7 +152,7 @@ adb_cmd shell mkdir -p "${DEVICE_DIR}/samples"
 for dir in h264SampleFrames h265SampleFrames opusSampleFrames girH264 bbbH264; do
     if [[ -d "${SAMPLES_SRC}/${dir}" ]]; then
         echo "  ${dir}/"
-        adb_cmd push "${SAMPLES_SRC}/${dir}" "${DEVICE_DIR}/samples/"
+        adb_cmd push --sync "${SAMPLES_SRC}/${dir}" "${DEVICE_DIR}/samples/"
     fi
 done
 
@@ -162,15 +161,17 @@ echo "=== Pushing test runner script ==="
 adb_cmd push "${SCRIPT_DIR}/run-tests-on-device.sh" "${DEVICE_DIR}/"
 adb_cmd shell chmod +x "${DEVICE_DIR}/run-tests-on-device.sh"
 
-echo ""
-echo "=== Running tests (log: ${DEVICE_DIR}/test-output.log) ==="
-echo ""
-adb_cmd shell "${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'"
-TEST_EXIT=$?
+TEST_LOG="${BUILD_DIR}/test-output-${SERIAL}.log"
 
 echo ""
-echo "=== Pulling test log ==="
-adb_cmd pull "${DEVICE_DIR}/test-output.log" "${BUILD_DIR}/test-output.log"
-echo "Log saved to ${BUILD_DIR}/test-output.log"
+echo "=== Running tests (log: ${TEST_LOG}) ==="
+echo ""
+set +e
+adb_cmd shell "${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'" | tee "$TEST_LOG"
+TEST_EXIT=${PIPESTATUS[0]}
+set -e
+
+echo ""
+echo "Log saved to ${TEST_LOG}"
 
 exit $TEST_EXIT

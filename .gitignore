@@ -4,3 +4,9 @@ build-*
 .claude
 CLAUDE.md
 .cache
+.idea
+android-test-app/app/.cxx
+android-test-app/.gradle
+claude_plans
+*.log
+logs
