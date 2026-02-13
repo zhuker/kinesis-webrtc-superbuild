@@ -10,10 +10,12 @@
 # Requires a connected device or running emulator.
 #
 # Usage:
-#   ./test-android-app.sh                          # build + run
+#   ./test-android-app.sh                          # build + run, auto-detect device
 #   ./test-android-app.sh --skip-build             # reuse previous build
 #   ./test-android-app.sh --filter 'StunApiTest.*' # gtest filter
-#   ./test-android-app.sh --serial emulator-5554   # target specific device
+#   ./test-android-app.sh --abi armeabi-v7a        # find matching device
+#   ./test-android-app.sh --serial emulator-5554   # target specific device, detect its ABI
+#   ./test-android-app.sh --serial XXXX --abi arm64-v8a  # target device with explicit ABI
 
 set -euo pipefail
 
@@ -36,37 +38,73 @@ ADB="${ANDROID_SDK}/platform-tools/adb"
 SKIP_BUILD=false
 GTEST_FILTER="*"
 SERIAL=""
+ABI=""
+ABI_SET=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-build) SKIP_BUILD=true; shift ;;
         --filter)     GTEST_FILTER="$2"; shift 2 ;;
         --serial)     SERIAL="$2"; shift 2 ;;
+        --abi)        ABI="$2"; ABI_SET=true; shift 2 ;;
         *)            echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# If no serial specified, auto-detect
-if [[ -z "$SERIAL" ]]; then
-    SERIAL=$("$ADB" devices | grep -v "^$" | grep -v "^List" | head -1 | awk '{print $1}' || true)
+# ── Find a connected device ───────────────────────────────────────────
+find_device_for_abi() {
+    local target_abi="$1"
+    local serials
+    serials=$("$ADB" devices | grep -v "^$" | grep -v "^List" | awk '{print $1}')
+
+    echo "$serials" | while read -r s; do
+        [[ -z "$s" ]] && continue
+        local device_abi
+        device_abi=$("$ADB" -s "$s" shell getprop ro.product.cpu.abi </dev/null 2>/dev/null | tr -d '\r') || continue
+        if [[ "$device_abi" == "$target_abi" ]]; then
+            echo "$s"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if [[ -n "$SERIAL" && "$ABI_SET" == false ]]; then
+    # --serial given without --abi: detect the device's primary ABI
+    ABI=$("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')
+    if [[ -z "$ABI" ]]; then
+        echo "ERROR: Could not detect ABI from device ${SERIAL}."
+        exit 1
+    fi
+    echo "=== Detected ABI '${ABI}' from device ${SERIAL} ==="
+elif [[ -z "$SERIAL" ]]; then
+    echo "=== Looking for a connected ${ABI} device ==="
+    if FOUND=$(find_device_for_abi "$ABI"); then
+        SERIAL="$FOUND"
+    else
+        echo "ERROR: No ${ABI} device found. Start an emulator or connect a device first."
+        echo "  To start an emulator: ./emulator.sh start"
+        exit 1
+    fi
 fi
 
-if [[ -z "$SERIAL" ]]; then
-    echo "ERROR: No connected device found. Start an emulator or connect a device first."
+# ── Verify ABI compatibility ──────────────────────────────────────────
+DEVICE_ABILIST=$("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')
+if [[ -z "$DEVICE_ABILIST" ]]; then
+    echo "ERROR: Could not query ABI list from device ${SERIAL}."
     exit 1
-else
-    echo "=== Using device: ${SERIAL} ==="
 fi
+if [[ ",$DEVICE_ABILIST," != *",$ABI,"* ]]; then
+    echo "ERROR: Device ${SERIAL} does not support ABI '${ABI}'."
+    echo "  Device supports: ${DEVICE_ABILIST}"
+    exit 1
+fi
+
+echo "=== Using device: ${SERIAL} (ABI: ${ABI}) ==="
 
 adb_cmd() {
     "$ADB" -s "$SERIAL" "$@"
 }
-
-# Verify a device is connected
-if ! adb_cmd shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; then
-    echo "ERROR: No connected device found. Start an emulator or connect a device first."
-    exit 1
-fi
 
 # ── Build via Gradle ─────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == false ]]; then

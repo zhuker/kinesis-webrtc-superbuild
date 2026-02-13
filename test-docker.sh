@@ -4,7 +4,8 @@ set -e
 PLATFORM="linux/arm64"
 IMAGE="kinesis-test"
 TIMEOUT=300
-TEST_BIN="/src/build-linux-arm64/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test"
+BUILD_DIR="build-${PLATFORM//\//-}"
+TEST_BIN="/src/${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test"
 LOG="docker-test.log"
 CONTAINER_NAME="kinesis-tests"
 
