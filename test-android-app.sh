@@ -57,7 +57,7 @@ find_device_for_abi() {
     local serials
     serials=$("$ADB" devices | grep -v "^$" | grep -v "^List" | awk '{print $1}')
 
-    echo "$serials" | while read -r s; do
+    while read -r s; do
         [[ -z "$s" ]] && continue
         local device_abi
         device_abi=$("$ADB" -s "$s" shell getprop ro.product.cpu.abi </dev/null 2>/dev/null | tr -d '\r') || continue
@@ -65,7 +65,7 @@ find_device_for_abi() {
             echo "$s"
             return 0
         fi
-    done
+    done <<< "$serials"
     return 1
 }
 
