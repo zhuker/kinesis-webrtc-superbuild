@@ -59,14 +59,14 @@ jobs:
           submodules: true
 
       - name: Start emulator
-        run: bash ./emulator.sh start -f
+        run: bash ./emulator.sh start --avd "firefly-test-arm64" ; bash ./emulator.sh status
 
       - name: Build, push, and test
         run: bash ./test-android.sh
 
       - name: Stop emulator
         if: always()
-        run: bash ./emulator.sh stop || true
+        run: bash ./emulator.sh stop --avd "firefly-test-arm64" || true
 
   test-android-app:
     name: Android arm64 (instrumented)
@@ -80,11 +80,11 @@ jobs:
           submodules: true
 
       - name: Start emulator
-        run: bash ./emulator.sh start ; bash ./emulator.sh status
+        run: bash ./emulator.sh start --avd "firefly-test-arm64" ; bash ./emulator.sh status
 
       - name: Build and test instrumented APK
         run: bash ./emulator.sh status ; bash ./test-android-app.sh
 
       - name: Stop emulator
         if: always()
-        run: bash ./emulator.sh stop || true
+        run: bash ./emulator.sh stop --avd "firefly-test-arm64" || true
