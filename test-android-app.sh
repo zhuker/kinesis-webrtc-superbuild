@@ -38,7 +38,7 @@ ADB="${ANDROID_SDK}/platform-tools/adb"
 SKIP_BUILD=false
 GTEST_FILTER="*"
 SERIAL=""
-ABI=""
+ABI="arm64-v8a"
 ABI_SET=false
 
 while [[ $# -gt 0 ]]; do
