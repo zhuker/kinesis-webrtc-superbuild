@@ -1,0 +1,23 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "mac-arm64-test",
+      "displayName": "macOS arm64 – Tests",
+      "description": "Static build with tests enabled, no signaling, no samples",
+      "binaryDir": "${sourceDir}/build-mac-arm64",
+      "cacheVariables": {
+        "BUILD_TEST": "ON",
+        "BUILD_SAMPLE": "ON",
+        "BUILD_STATIC_LIBS": "ON",
+        "ENABLE_SIGNALING": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mac-arm64-test",
+      "configurePreset": "mac-arm64-test"
+    }
+  ]
+}
