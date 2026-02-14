@@ -7,7 +7,9 @@ Root CMake project that builds the [Amazon Kinesis Video Streams WebRTC SDK](htt
 - CMake 3.14+
 - C/C++ compiler (GCC, Clang, or MSVC)
 - pkg-config
-- OpenSSL development headers (if using `-DUSE_SYSTEM_OPENSSL=ON`)
+- Perl (for OpenSSL's Configure script)
+- **macOS**: Xcode command-line tools (`xcode-select --install`)
+- **Android**: Android SDK with NDK 28.2.13676358, `platform-tools`, `cmdline-tools`
 
 ## Clone
 
@@ -67,16 +69,15 @@ git add amazon-kinesis-video-streams-webrtc-sdk-c
 
 ## Build
 
-```bash
-mkdir build && cd build
-cmake .. -DUSE_SYSTEM_OPENSSL=ON
-cmake --build . -j$(nproc)
-```
-
-Build OpenSSL from submodule instead of using the system one:
+All platforms use the same core CMake settings: OpenSSL built from the submodule, signaling disabled, static libraries.
 
 ```bash
-cmake ..
+cmake -B build -S . \
+    -DBUILD_TEST=ON \
+    -DBUILD_SAMPLE=OFF \
+    -DBUILD_STATIC_LIBS=ON \
+    -DENABLE_SIGNALING=OFF
+cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ```
 
 ### CMake Options
@@ -86,104 +87,149 @@ cmake ..
 | `USE_SYSTEM_OPENSSL` | `OFF` | Use system OpenSSL instead of building from submodule |
 | `BUILD_STATIC_LIBS` | `OFF` | Build all libraries statically |
 | `BUILD_SAMPLE` | `ON` | Build WebRTC SDK sample applications |
+| `ENABLE_SIGNALING` | `ON` | Enable AWS signaling client (requires libwebsockets) |
 | `ENABLE_DATA_CHANNEL` | `ON` | Enable data channel support |
 | `ENABLE_KVS_THREADPOOL` | `OFF` | Enable KVS thread pool in signaling |
 | `BUILD_TEST` | `OFF` | Build WebRTC SDK tests |
+| `BUILD_ANDROID_JNI_TEST` | `OFF` | Build Android JNI test library instead of test executable |
 | `ENABLE_AWS_SDK_IN_TESTS` | `OFF` | Enable AWS SDK in tests (requires AWS C++ SDK) |
 | `BUILD_BENCHMARK` | `OFF` | Build WebRTC SDK benchmarks |
 | `BUILD_OPENSSL_PLATFORM` | `""` | OpenSSL target platform for cross-compilation |
 | `OPENSSL_NO_ASM` | `OFF` | Disable OpenSSL assembly optimizations (needed for QEMU) |
 
-## Android Build
+## Testing
 
-Requires the Android NDK. Set `NDK` to your NDK path:
-
-```bash
-NDK=$HOME/Library/Android/sdk/ndk/25.2.9519653
-
-cmake -B build-android-arm64 \
-  -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-26 \
-  -DBUILD_SAMPLE=OFF \
-  -DBUILD_STATIC_LIBS=ON
-
-cmake --build build-android-arm64 -j$(nproc)
-```
-
-OpenSSL is automatically cross-compiled for the target ABI. The `BUILD_OPENSSL_PLATFORM` is auto-detected from `ANDROID_ABI` (e.g. `arm64-v8a` maps to `android-arm64`).
-
-Supported ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`.
-
-### Android Testing
-
-Use `test-android.sh` to build, push, and run unit tests on an Android emulator:
+### macOS (arm64)
 
 ```bash
-./test-android.sh
+./test-mac.sh
 ```
 
-Prerequisites:
-- Android SDK with NDK 25.2.9519653 (or set `ANDROID_NDK`)
-- System image: `system-images;android-26;default;arm64-v8a`
-
-The script automatically creates an AVD named `test-android26-arm64` and starts the emulator if needed. To set up the emulator manually:
-
-```bash
-sdkmanager "system-images;android-26;default;arm64-v8a"
-avdmanager create avd -n test-android26-arm64 \
-  -k "system-images;android-26;default;arm64-v8a" -f <<< "no"
-```
-
-Script options:
+Builds to `build-mac-arm64/` and runs all gtest tests.
 
 | Flag | Description |
 |---|---|
-| `--skip-build` | Push and run only (reuse existing build) |
-| `--filter 'Pattern.*'` | Run specific tests matching a gtest filter |
-| `--all` | Run all tests (including those requiring network/credentials) |
-| `--serial <id>` | Target a specific device (default: auto-detect emulator) |
+| `--skip-build` | Reuse existing build |
+| `--filter 'StunApiTest.*'` | Run specific tests |
 
-To build with tests and run manually:
+### Linux (Docker, arm64)
 
 ```bash
-NDK=$HOME/Library/Android/sdk/ndk/25.2.9519653
-
-cmake -B build-android-arm64 \
-  -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-26 \
-  -DBUILD_SAMPLE=OFF \
-  -DBUILD_STATIC_LIBS=ON \
-  -DBUILD_TEST=ON
-
-cmake --build build-android-arm64 -j$(nproc)
-
-adb push build-android-arm64/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test /data/local/tmp/
-adb push build-android-arm64/amazon-kinesis-video-streams-producer-c/libkvsCommonLws.so /data/local/tmp/
-adb push build-android-arm64/libwebsockets/lib/libwebsockets.so /data/local/tmp/
-adb shell chmod +x /data/local/tmp/webrtc_client_test
-adb shell "LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/webrtc_client_test --gtest_filter='StunApiTest.*:SdpApiTest.*'"
+./test-docker.sh
 ```
 
-## Docker Build (Linux/amd64)
+Builds a Docker image (`--platform linux/arm64`) and runs tests in a container.
 
 ```bash
-docker build --platform=linux/amd64 -t kinesis-webrtc-superbuild .
+./test-docker.sh build   # build image only
+./test-docker.sh run     # run tests only (reuse image)
 ```
 
-Sample binaries end up in `build-linux-amd64/amazon-kinesis-video-streams-webrtc-sdk-c/samples/` inside the image.
+### Android -- native binary
 
-## Output
+Builds a standalone gtest executable, pushes it to a device via `adb`, and runs it.
+Requires a connected device or running emulator.
 
-Sample binaries are built to `build/amazon-kinesis-video-streams-webrtc-sdk-c/samples/`:
+```bash
+# arm64 (default)
+./emulator.sh start          # start emulator if needed
+./test-android.sh
 
-- `kvsWebrtcClientMaster`
-- `kvsWebrtcClientViewer`
-- `customSignaling`
-- `whepServer`
-- `whipServer`
-- `discoverNatBehavior`
+# arm32 (requires physical device)
+./test-android.sh --abi armeabi-v7a
+
+# target a specific device (ABI auto-detected)
+./test-android.sh --serial emulator-5554
+```
+
+| Flag | Description |
+|---|---|
+| `--abi <abi>` | Target ABI: `arm64-v8a` (default) or `armeabi-v7a` |
+| `--serial <serial>` | Target a specific device (ABI auto-detected from device) |
+| `--skip-build` | Reuse existing build |
+| `--filter 'StunApiTest.*'` | Run specific tests |
+
+If `--serial` is not given, the script scans connected devices for one matching the
+target ABI. Build output goes to `build-android-<abi>/`.
+
+### Android -- instrumented app
+
+Builds an APK via Gradle (both arm64 + arm32), installs it on a device, and runs
+gtest tests through Android instrumentation. This exercises the JNI bridge and runs
+tests in the `untrusted_app` SELinux domain, which is more restrictive than the shell
+domain used by the native binary test.
+
+```bash
+./emulator.sh start          # start emulator if needed
+./test-android-app.sh
+```
+
+Options are the same as `test-android.sh` (`--abi`, `--serial`, `--skip-build`, `--filter`).
+
+To run on all connected devices in parallel:
+
+```bash
+./all-test-android-app.sh
+```
+
+### Emulator management
+
+```bash
+./emulator.sh start              # start API 26 emulator (error if already running)
+./emulator.sh start -f           # no-op if already running
+./emulator.sh start --api 30    # start API 30 emulator
+./emulator.sh stop               # stop running emulator
+./emulator.sh restart            # stop + start
+./emulator.sh status             # list all connected devices/emulators
+```
+
+`status` shows serial, type (emulator/device), API level, and supported ABIs for
+every connected device.
+
+## Project structure
+
+```
+CMakeLists.txt                              Root superbuild
+openssl/                                    Git submodule (OpenSSL_1_1_1t)
+libwebsockets/                              Git submodule (v4.3.5)
+libsrtp/                                    Git submodule
+usrsctp/                                    Git submodule
+jsmn/                                       Git submodule (v1.0.0)
+amazon-kinesis-video-streams-pic/           Git submodule (kvspic)
+amazon-kinesis-video-streams-producer-c/    Git submodule (kvsCommonLws)
+amazon-kinesis-video-streams-webrtc-sdk-c/  WebRTC SDK
+googletest/                                 Git submodule (release-1.12.1)
+android-test-app/                           Gradle project for instrumented tests
+```
+
+### Build order
+
+```
+OpenSSL (built at configure time)
+  |
+  v
+usrsctp -> jsmn -> libsrtp -> kvspic -> WebRTC SDK
+```
+
+With `ENABLE_SIGNALING=ON`, libwebsockets and producer-c are also built between jsmn and libsrtp.
+
+### Architecture
+
+All CMake-based dependencies are integrated via `add_subdirectory`. OpenSSL is built at configure time via `execute_process` since it has no CMakeLists.txt (autotools-based).
+
+The SDK's `find_library()` calls are bypassed by pre-setting CACHE variables (`SRTP_LIBRARIES`, `Usrsctp`, `LIBWEBSOCKETS_LIBRARIES`) to CMake target names. This allows `target_link_libraries` to resolve them as in-tree targets, propagating include directories and link flags automatically.
+
+## Scripts summary
+
+| Script | Purpose |
+|--------|---------|
+| `test-mac.sh` | Build + test on macOS arm64 |
+| `test-docker.sh` | Build + test in Docker (linux/arm64) |
+| `test-android.sh` | Build + push + test native binary on Android |
+| `test-android-app.sh` | Build + install + test instrumented APK on Android |
+| `all-test-android-app.sh` | Run instrumented tests on all connected devices in parallel |
+| `emulator.sh` | Manage Android emulator (start/stop/restart/status) |
+| `run-tests-on-device.sh` | Test runner executed on the Android device (pushed by test-android.sh) |
 
 ## Submodules
 
@@ -197,16 +243,4 @@ Sample binaries are built to `build/amazon-kinesis-video-streams-webrtc-sdk-c/sa
 | `amazon-kinesis-video-streams-pic/` | [awslabs/amazon-kinesis-video-streams-pic](https://github.com/awslabs/amazon-kinesis-video-streams-pic) | v1.2.0 |
 | `amazon-kinesis-video-streams-producer-c/` | [awslabs/amazon-kinesis-video-streams-producer-c](https://github.com/awslabs/amazon-kinesis-video-streams-producer-c) | v1.6.0 |
 | `googletest/` | [google/googletest](https://github.com/google/googletest) | release-1.12.1 |
-| `amazon-kinesis-video-streams-webrtc-sdk-c/` | [zhuker/amazon-kinesis-video-streams-webrtc-sdk-c](https://github.com/zhuker/amazon-kinesis-video-streams-webrtc-sdk-c) | 36a82a6f |
-
-## Architecture
-
-All CMake-based dependencies are integrated via `add_subdirectory`. OpenSSL is built at configure time via `execute_process` since it has no CMakeLists.txt (autotools-based). When `USE_SYSTEM_OPENSSL=ON`, the system OpenSSL is used via `find_package`.
-
-```
-OpenSSL (execute_process at configure time)
-  |
-usrsctp -> jsmn -> libwebsockets -> libsrtp -> kvspic -> producer-c -> WebRTC SDK
-```
-
-The SDK's `find_library()` calls are bypassed by pre-setting CACHE variables (`SRTP_LIBRARIES`, `Usrsctp`, `LIBWEBSOCKETS_LIBRARIES`) to CMake target names. This allows `target_link_libraries` to resolve them as in-tree targets, propagating include directories and link flags automatically.
+| `amazon-kinesis-video-streams-webrtc-sdk-c/` | [zhuker/amazon-kinesis-video-streams-webrtc-sdk-c](https://github.com/zhuker/amazon-kinesis-video-streams-webrtc-sdk-c) | gcc-custom-signaling |
