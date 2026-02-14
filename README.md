@@ -67,6 +67,21 @@ cd ..
 git add amazon-kinesis-video-streams-webrtc-sdk-c
 ```
 
+### Pushing a local fix in a submodule
+
+If you made a fix inside a submodule (e.g. `amazon-kinesis-video-streams-pic`)
+and want to push it to the submodule's remote branch and update the parent repo:
+
+```bash
+cd amazon-kinesis-video-streams-pic
+git checkout android-fixes              # switch from detached HEAD to the branch
+git merge <commit> --ff-only            # fast-forward the branch to include your fix
+git push origin android-fixes           # push to remote
+cd ..
+git add amazon-kinesis-video-streams-pic
+git commit -m "update pic submodule"
+```
+
 ## Build
 
 All platforms use the same core CMake settings: OpenSSL built from the submodule, signaling disabled, static libraries.

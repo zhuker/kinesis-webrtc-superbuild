@@ -44,7 +44,7 @@ DEVICE_DIR="/data/local/tmp"
 SKIP_BUILD=false
 GTEST_FILTER="*"
 SERIAL=""
-ABI=""
+ABI="arm64-v8a"
 ABI_SET=false
 
 while [[ $# -gt 0 ]]; do

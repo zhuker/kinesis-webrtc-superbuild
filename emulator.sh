@@ -23,7 +23,7 @@ AVDMANAGER="${ANDROID_SDK}/cmdline-tools/latest/bin/avdmanager"
 
 # List running emulator serials (one per line)
 running_emulators() {
-    "$ADB" devices 2>/dev/null | grep "^emulator-" | awk '{print $1}'
+    "$ADB" devices 2>/dev/null | grep "^emulator-" | awk '{print $1}' || true
 }
 
 do_status() {

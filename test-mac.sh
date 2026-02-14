@@ -11,7 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build-mac-arm64"
-CMAKE=/Applications/CMake.app/Contents/bin/cmake
+CMAKE="${CMAKE:-cmake}"
 
 SKIP_BUILD=false
 GTEST_FILTER="*"

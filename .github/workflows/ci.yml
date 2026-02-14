@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_HOME: /Users/firefly/Library/Android/sdk
+
+jobs:
+  test-mac:
+    name: macOS arm64
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Build and test
+        run: ./test-mac.sh
+
+  test-docker:
+    name: Linux arm64 (Docker)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Verify Docker
+        run: docker info
+
+      - name: Build and test
+        run: ./test-docker.sh
+
+  test-android:
+    name: Android arm64 (native)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Start emulator
+        run: ./emulator.sh start -f
+
+      - name: Build, push, and test
+        run: ./test-android.sh
+
+      - name: Stop emulator
+        if: always()
+        run: ./emulator.sh stop || true
+
+  test-android-app:
+    name: Android arm64 (instrumented)
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: test-android
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Start emulator
+        run: ./emulator.sh start -f
+
+      - name: Build and test instrumented APK
+        run: ./test-android-app.sh
+
+      - name: Stop emulator
+        if: always()
+        run: ./emulator.sh stop || true
