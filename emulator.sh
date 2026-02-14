@@ -120,8 +120,9 @@ do_start() {
 
     # Start
     echo "=== Starting emulator: ${avd_name} ==="
+    local logfile="emulator-$avd_name.log"
     "$EMULATOR_BIN" -avd "$avd_name" -no-window -no-audio -no-boot-anim \
-        -gpu swiftshader_indirect &>/tmp/emulator-test.log &
+        -gpu swiftshader_indirect &>"$logfile" &
     local pid=$!
 
     echo "Waiting for emulator to boot (PID: ${pid})..."

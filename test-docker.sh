@@ -25,6 +25,7 @@ docker_run() {
     timeout "$TIMEOUT" docker run --platform "$PLATFORM" --init \
         --name "$CONTAINER_NAME" \
         --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+        -e AWS_KVS_LOG_LEVEL="${AWS_KVS_LOG_LEVEL:-}" \
         "$IMAGE" "$TEST_BIN" --gtest_break_on_failure 2>&1 | tee "$LOG"
     RC=${PIPESTATUS[0]}
     echo "Test log saved to $LOG"
