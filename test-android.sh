@@ -159,7 +159,7 @@ echo ""
 echo "=== Running tests (log: ${TEST_LOG}) ==="
 echo ""
 set +e
-adb_cmd shell "${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'" | tee "$TEST_LOG"
+adb_cmd shell "AWS_KVS_LOG_LEVEL='${AWS_KVS_LOG_LEVEL:-}' ${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'" | tee "$TEST_LOG"
 TEST_EXIT=${PIPESTATUS[0]}
 set -e
 

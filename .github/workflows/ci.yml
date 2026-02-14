@@ -16,6 +16,7 @@ defaults:
 
 env:
   ANDROID_HOME: /Users/firefly/Library/Android/sdk
+  AWS_KVS_LOG_LEVEL: 3
 
 jobs:
   test-mac:
@@ -45,7 +46,7 @@ jobs:
         run: docker info
 
       - name: Build and test
-        run: ./test-docker.sh
+        run: bash ./test-docker.sh
 
   test-android:
     name: Android arm64 (native)
@@ -58,14 +59,14 @@ jobs:
           submodules: true
 
       - name: Start emulator
-        run: ./emulator.sh start -f
+        run: bash ./emulator.sh start -f
 
       - name: Build, push, and test
-        run: ./test-android.sh
+        run: bash ./test-android.sh
 
       - name: Stop emulator
         if: always()
-        run: ./emulator.sh stop || true
+        run: bash ./emulator.sh stop || true
 
   test-android-app:
     name: Android arm64 (instrumented)
@@ -79,11 +80,11 @@ jobs:
           submodules: true
 
       - name: Start emulator
-        run: ./emulator.sh start -f
+        run: bash ./emulator.sh start ; bash ./emulator.sh status
 
       - name: Build and test instrumented APK
-        run: ./test-android-app.sh
+        run: bash ./emulator.sh status ; bash ./test-android-app.sh
 
       - name: Stop emulator
         if: always()
-        run: ./emulator.sh stop || true
+        run: bash ./emulator.sh stop || true
