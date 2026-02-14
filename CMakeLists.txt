@@ -130,8 +130,22 @@ else()
           WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
           RESULT_VARIABLE _result)
     else()
+      # On macOS, system headers live inside the Xcode SDK (no /usr/include).
+      # OpenSSL 1.1.1's ./config doesn't pass -isysroot, so we inject it.
+      if(APPLE AND CMAKE_OSX_SYSROOT)
+        set(_openssl_env_cmd ${CMAKE_COMMAND} -E env "CFLAGS=-isysroot ${CMAKE_OSX_SYSROOT}")
+      elseif(APPLE)
+        execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE _osx_sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(_osx_sdk)
+          set(_openssl_env_cmd ${CMAKE_COMMAND} -E env "CFLAGS=-isysroot ${_osx_sdk}")
+        else()
+          set(_openssl_env_cmd)
+        endif()
+      else()
+        set(_openssl_env_cmd)
+      endif()
       execute_process(
-          COMMAND ./config ${OPENSSL_EXTRA_FLAGS}
+          COMMAND ${_openssl_env_cmd} ./config ${OPENSSL_EXTRA_FLAGS}
                   --prefix=${DEPS_INSTALL_PREFIX} --openssldir=${DEPS_INSTALL_PREFIX}
           WORKING_DIRECTORY ${OPENSSL_BUILD_SRC}
           RESULT_VARIABLE _result)
