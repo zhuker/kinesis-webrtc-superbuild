@@ -88,3 +88,52 @@ jobs:
       - name: Stop emulator
         if: always()
         run: bash ./emulator.sh stop --avd "firefly-test-arm64" || true
+
+  test-mac-asan:
+    name: macOS arm64 (ASan + UBSan)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Build and test with ASan
+        run: ./test-mac.sh --asan
+
+  test-docker-asan:
+    name: Linux arm64 (ASan + UBSan, Docker)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Verify Docker
+        run: docker info
+
+      - name: Build and test with ASan
+        run: bash ./test-docker.sh --asan
+
+  test-android-asan:
+    name: Android arm64 (ASan + UBSan)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Start emulator
+        run: bash ./emulator.sh start --avd "firefly-test-arm64" ; bash ./emulator.sh status
+
+      - name: Build, push, and test with ASan
+        run: bash ./test-android.sh --asan
+
+      - name: Stop emulator
+        if: always()
+        run: bash ./emulator.sh stop --avd "firefly-test-arm64" || true
