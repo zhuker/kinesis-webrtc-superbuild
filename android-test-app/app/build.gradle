@@ -22,11 +22,15 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments "-DBUILD_SAMPLE=OFF",
-                          "-DBUILD_STATIC_LIBS=ON",
-                          "-DBUILD_TEST=ON",
-                          "-DBUILD_ANDROID_JNI_TEST=ON",
-                          "-DENABLE_SIGNALING=OFF"
+                def args = ["-DBUILD_SAMPLE=OFF",
+                            "-DBUILD_STATIC_LIBS=ON",
+                            "-DBUILD_TEST=ON",
+                            "-DBUILD_ANDROID_JNI_TEST=ON",
+                            "-DENABLE_SIGNALING=OFF"]
+                if (project.hasProperty('enableAsan') && project.property('enableAsan') == 'true') {
+                    args += "-DADDRESS_SANITIZER=ON"
+                }
+                arguments(*args)
             }
         }
     }

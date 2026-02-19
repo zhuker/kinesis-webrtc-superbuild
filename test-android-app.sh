@@ -16,6 +16,7 @@
 #   ./test-android-app.sh --abi armeabi-v7a        # find matching device
 #   ./test-android-app.sh --serial emulator-5554   # target specific device, detect its ABI
 #   ./test-android-app.sh --serial XXXX --abi arm64-v8a  # target device with explicit ABI
+#   ./test-android-app.sh --asan                        # build with AddressSanitizer
 
 set -euo pipefail
 
@@ -40,6 +41,7 @@ GTEST_FILTER="*"
 SERIAL=""
 ABI="arm64-v8a"
 ABI_SET=false
+ASAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         --filter)     GTEST_FILTER="$2"; shift 2 ;;
         --serial)     SERIAL="$2"; shift 2 ;;
         --abi)        ABI="$2"; ABI_SET=true; shift 2 ;;
+        --asan)       ASAN=true; shift ;;
         *)            echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -109,7 +112,11 @@ adb_cmd() {
 # ── Build via Gradle ─────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == false ]]; then
     echo "=== Building android-test-app via Gradle ==="
-    "${APP_DIR}/gradlew" -p "$APP_DIR" assembleDebug assembleDebugAndroidTest
+    GRADLE_PROPS=()
+    if [[ "$ASAN" == true ]]; then
+        GRADLE_PROPS+=(-PenableAsan=true)
+    fi
+    "${APP_DIR}/gradlew" -p "$APP_DIR" "${GRADLE_PROPS[@]}" assembleDebug assembleDebugAndroidTest
 
     if [[ ! -f "$APP_APK" ]]; then
         echo "ERROR: App APK not found at ${APP_APK}"

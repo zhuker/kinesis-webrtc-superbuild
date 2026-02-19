@@ -12,6 +12,7 @@
 #   ./test-android.sh --abi armeabi-v7a           # build arm32, find matching device
 #   ./test-android.sh --serial emulator-5554      # target specific device, detect its ABI
 #   ./test-android.sh --serial XXXX --abi arm64-v8a  # target device with explicit ABI
+#   ./test-android.sh --asan                        # build with AddressSanitizer
 #
 # Prerequisites:
 #   - Android SDK with NDK 28.2.13676358 (or set ANDROID_NDK)
@@ -46,6 +47,7 @@ GTEST_FILTER="*"
 SERIAL=""
 ABI="arm64-v8a"
 ABI_SET=false
+ASAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -53,6 +55,7 @@ while [[ $# -gt 0 ]]; do
         --filter)     GTEST_FILTER="$2"; shift 2 ;;
         --serial)     SERIAL="$2"; shift 2 ;;
         --abi)        ABI="$2"; ABI_SET=true; shift 2 ;;
+        --asan)       ASAN=true; shift ;;
         *)            echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -105,7 +108,11 @@ if [[ ",$DEVICE_ABILIST," != *",$ABI,"* ]]; then
     exit 1
 fi
 
-BUILD_DIR="${SCRIPT_DIR}/build-android-${ABI}"
+if [[ "$ASAN" == true ]]; then
+    BUILD_DIR="${SCRIPT_DIR}/build-android-${ABI}-asan"
+else
+    BUILD_DIR="${SCRIPT_DIR}/build-android-${ABI}"
+fi
 
 echo "=== Using device: ${SERIAL} (ABI: ${ABI}) ==="
 
@@ -120,6 +127,10 @@ adb_cmd() {
 # ── Build ──────────────────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == false ]]; then
     echo "=== Building for Android ${ABI} ==="
+    ASAN_FLAG=""
+    if [[ "$ASAN" == true ]]; then
+        ASAN_FLAG="-DADDRESS_SANITIZER=ON"
+    fi
     cmake -B "$BUILD_DIR" -S "$SCRIPT_DIR" \
         -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK}/build/cmake/android.toolchain.cmake" \
         -DANDROID_ABI="${ABI}" \
@@ -127,7 +138,8 @@ if [[ "$SKIP_BUILD" == false ]]; then
         -DBUILD_SAMPLE=OFF \
         -DBUILD_STATIC_LIBS=ON \
         -DBUILD_TEST=ON \
-        -DENABLE_SIGNALING=OFF
+        -DENABLE_SIGNALING=OFF \
+        $ASAN_FLAG
     cmake --build "$BUILD_DIR" -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
 fi
 

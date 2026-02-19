@@ -1,21 +1,25 @@
 FROM ubuntu:22.04 AS builder
 
+ARG ADDRESS_SANITIZER=OFF
+ARG BUILD_DIR=build-linux-arm64
+ENV BUILD_DIR=${BUILD_DIR}
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     pkg-config \
-    perl \
-    && rm -rf /var/lib/apt/lists/*
+    perl && rm -rf /var/lib/apt/lists/*
 
 COPY . /src
 WORKDIR /src
 
-RUN cmake -B build-linux-arm64 \
+RUN cmake -B ${BUILD_DIR} \
     -DBUILD_TEST=ON \
     -DBUILD_SAMPLE=OFF \
     -DBUILD_STATIC_LIBS=ON \
-    -DENABLE_SIGNALING=OFF
-RUN cmake --build build-linux-arm64 -j$(nproc)
+    -DENABLE_SIGNALING=OFF \
+    -DADDRESS_SANITIZER=${ADDRESS_SANITIZER}
+RUN cmake --build ${BUILD_DIR} -j$(nproc)
 
 WORKDIR /src/amazon-kinesis-video-streams-webrtc-sdk-c/tst
-CMD ["/src/build-linux-arm64/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test", "--gtest_break_on_failure"]
+CMD /src/${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test --gtest_break_on_failure
