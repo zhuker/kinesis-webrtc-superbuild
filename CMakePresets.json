@@ -7,6 +7,7 @@
       "description": "Static build with tests enabled, no signaling, no samples",
       "binaryDir": "${sourceDir}/build-mac-arm64",
       "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "BUILD_TEST": "ON",
         "BUILD_SAMPLE": "ON",
         "BUILD_STATIC_LIBS": "ON",
