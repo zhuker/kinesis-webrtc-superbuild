@@ -1,4 +1,4 @@
-FROM ubuntu:24.04 AS builder
+FROM --platform=linux/amd64 ubuntu:24.04 AS builder
 
 ARG FILC_VERSION=0.678
 ARG BUILD_DIR=build-linux-amd64-filc
@@ -6,7 +6,7 @@ ENV BUILD_DIR=${BUILD_DIR}
 
 # Install build dependencies (fil-c provides the compiler)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake pkg-config perl make wget xz-utils ca-certificates binutils patchelf \
+    cmake pkg-config perl make wget xz-utils ca-certificates binutils patchelf linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install fil-c (pizfix / musl-based self-contained distribution)
