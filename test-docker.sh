@@ -11,7 +11,7 @@ DEFAULT_ASAN_OPTIONS="halt_on_error=0:detect_stack_use_after_return=1:strict_str
 DEFAULT_UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 DEFAULT_TSAN_OPTIONS="second_deadlock_stack=1:halt_on_error=1:suppressions=/src/amazon-kinesis-video-streams-webrtc-sdk-c/tst/suppressions/TSAN.supp"
 LOG="docker-test.log"
-CONTAINER_NAME="kinesis-tests"
+CONTAINER_NAME="kinesis-tests" # updated below after platform is known
 
 cleanup() {
     docker kill "$CONTAINER_NAME" 2>/dev/null || true
@@ -82,6 +82,7 @@ if [[ "$FILC" == true ]]; then
     PLATFORM="linux/amd64"
 fi
 IMAGE="${IMAGE}-${PLATFORM//\//-}"
+CONTAINER_NAME="${CONTAINER_NAME}-${PLATFORM//\//-}"
 BUILD_DIR="build-${PLATFORM//\//-}"
 if [[ "$ASAN" == true ]]; then
     BUILD_DIR="${BUILD_DIR}-asan"
