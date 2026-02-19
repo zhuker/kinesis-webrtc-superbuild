@@ -118,6 +118,22 @@ jobs:
       - name: Build and test with ASan
         run: bash ./test-docker.sh --asan
 
+  test-docker-tsan:
+    name: Linux arm64 (TSan, Docker)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Verify Docker
+        run: docker info
+
+      - name: Build and test with TSan
+        run: bash ./test-docker.sh --tsan
+
   test-android-asan:
     name: Android arm64 (ASan + UBSan)
     runs-on: [self-hosted, macOS, ARM64]
