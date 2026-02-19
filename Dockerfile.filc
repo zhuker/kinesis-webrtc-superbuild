@@ -6,7 +6,7 @@ ENV BUILD_DIR=${BUILD_DIR}
 
 # Install build dependencies (fil-c provides the compiler)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake pkg-config perl make wget xz-utils ca-certificates binutils \
+    cmake pkg-config perl make wget xz-utils ca-certificates binutils patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install fil-c (pizfix / musl-based self-contained distribution)
