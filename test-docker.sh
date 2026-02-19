@@ -35,6 +35,7 @@ docker_build() {
 }
 
 docker_run() {
+    cleanup
     echo "Running tests (${TIMEOUT}s timeout)..."
     local san_env=()
     if [[ "$ASAN" == true ]]; then
