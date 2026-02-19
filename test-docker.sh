@@ -6,6 +6,7 @@ IMAGE="kinesis-test"
 TIMEOUT=300
 ASAN=false
 TSAN=false
+FILC=false
 DEFAULT_ASAN_OPTIONS="halt_on_error=0:detect_stack_use_after_return=1:strict_string_checks=1:max_free_fill_size=4096:detect_invalid_pointer_pairs=2"
 DEFAULT_UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 DEFAULT_TSAN_OPTIONS="second_deadlock_stack=1:halt_on_error=1:suppressions=/src/amazon-kinesis-video-streams-webrtc-sdk-c/tst/suppressions/TSAN.supp"
@@ -21,12 +22,16 @@ trap cleanup EXIT
 docker_build() {
     echo "Building Docker image..."
     local build_args=()
-    if [[ "$ASAN" == true ]]; then
+    local dockerfile_args=()
+    if [[ "$FILC" == true ]]; then
+        dockerfile_args+=(-f Dockerfile.filc)
+        build_args+=(--build-arg "BUILD_DIR=${BUILD_DIR}")
+    elif [[ "$ASAN" == true ]]; then
         build_args+=(--build-arg ADDRESS_SANITIZER=ON --build-arg UNDEFINED_BEHAVIOR_SANITIZER=ON --build-arg "BUILD_DIR=${BUILD_DIR}")
     elif [[ "$TSAN" == true ]]; then
         build_args+=(--build-arg THREAD_SANITIZER=ON --build-arg "BUILD_DIR=${BUILD_DIR}")
     fi
-    docker build --platform "$PLATFORM" "${build_args[@]}" -t "$IMAGE" .
+    docker build --platform "$PLATFORM" "${dockerfile_args[@]}" "${build_args[@]}" -t "$IMAGE" .
 }
 
 docker_run() {
@@ -59,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --asan)      ASAN=true; shift ;;
         --tsan)      TSAN=true; shift ;;
+        --filc)      FILC=true; shift ;;
         --platform)  PLATFORM="$2"; shift 2 ;;
         *)           break ;;
     esac
@@ -67,11 +73,20 @@ done
 if [[ "$ASAN" == true && "$TSAN" == true ]]; then
     echo "ERROR: --asan and --tsan cannot be combined"; exit 1
 fi
+if [[ "$FILC" == true && ( "$ASAN" == true || "$TSAN" == true ) ]]; then
+    echo "ERROR: --filc cannot be combined with sanitizers (fil-c provides its own memory safety)"; exit 1
+fi
+# fil-c only supports linux/x86_64
+if [[ "$FILC" == true ]]; then
+    PLATFORM="linux/amd64"
+fi
 BUILD_DIR="build-${PLATFORM//\//-}"
 if [[ "$ASAN" == true ]]; then
     BUILD_DIR="${BUILD_DIR}-asan"
 elif [[ "$TSAN" == true ]]; then
     BUILD_DIR="${BUILD_DIR}-tsan"
+elif [[ "$FILC" == true ]]; then
+    BUILD_DIR="${BUILD_DIR}-filc"
 fi
 TEST_BIN="/src/${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test"
 
