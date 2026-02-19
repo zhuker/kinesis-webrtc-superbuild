@@ -1,0 +1,39 @@
+FROM ubuntu:24.04 AS builder
+
+ARG FILC_VERSION=0.678
+ARG BUILD_DIR=build-linux-amd64-filc
+ENV BUILD_DIR=${BUILD_DIR}
+
+# Install build dependencies (fil-c provides the compiler)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake pkg-config perl make wget xz-utils ca-certificates binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install fil-c (pizfix / musl-based self-contained distribution)
+RUN wget -q "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/filc-${FILC_VERSION}-linux-x86_64.tar.xz" \
+        -O /tmp/filc.tar.xz && \
+    mkdir -p /opt/filc && \
+    tar xf /tmp/filc.tar.xz -C /opt/filc --strip-components=1 && \
+    rm /tmp/filc.tar.xz && \
+    cd /opt/filc && ./setup.sh
+
+ENV CC=/opt/filc/build/bin/clang
+ENV CXX=/opt/filc/build/bin/clang++
+ENV PATH="/opt/filc/build/bin:${PATH}"
+
+COPY . /src
+WORKDIR /src
+
+RUN cmake -B ${BUILD_DIR} \
+    -DCMAKE_C_COMPILER=${CC} \
+    -DCMAKE_CXX_COMPILER=${CXX} \
+    -DBUILD_TEST=ON \
+    -DBUILD_SAMPLE=OFF \
+    -DBUILD_STATIC_LIBS=ON \
+    -DENABLE_SIGNALING=OFF \
+    -DOPENSSL_NO_ASM=ON
+
+RUN cmake --build ${BUILD_DIR} -j$(nproc)
+
+WORKDIR /src/amazon-kinesis-video-streams-webrtc-sdk-c/tst
+CMD /src/${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test --gtest_break_on_failure
