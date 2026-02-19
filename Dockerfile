@@ -8,14 +8,12 @@ ENV BUILD_DIR=${BUILD_DIR}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    gcc-14 g++-14 \
+    clang \
     cmake \
     pkg-config \
-    perl && rm -rf /var/lib/apt/lists/* \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
-       --slave /usr/bin/g++ g++ /usr/bin/g++-14
+    perl && rm -rf /var/lib/apt/lists/*
 
-ENV CC=gcc-14 CXX=g++-14
+ENV CC=clang CXX=clang++
 
 COPY . /src
 WORKDIR /src
