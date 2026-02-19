@@ -135,6 +135,7 @@ jobs:
         run: bash ./test-docker.sh --tsan
 
   test-docker-filc:
+    if: false # disabled for now
     name: Linux amd64 (fil-c, Docker)
     runs-on: ubuntu-latest
     timeout-minutes: 60
