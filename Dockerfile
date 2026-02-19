@@ -9,6 +9,7 @@ ENV BUILD_DIR=${BUILD_DIR}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     clang \
+    llvm \
     libclang-rt-18-dev \
     cmake \
     pkg-config \
