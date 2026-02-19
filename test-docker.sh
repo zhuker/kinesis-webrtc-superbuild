@@ -81,6 +81,7 @@ fi
 if [[ "$FILC" == true ]]; then
     PLATFORM="linux/amd64"
 fi
+IMAGE="${IMAGE}-${PLATFORM//\//-}"
 BUILD_DIR="build-${PLATFORM//\//-}"
 if [[ "$ASAN" == true ]]; then
     BUILD_DIR="${BUILD_DIR}-asan"
