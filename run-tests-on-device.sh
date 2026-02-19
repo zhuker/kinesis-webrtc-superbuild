@@ -11,6 +11,8 @@ GTEST_FILTER="${1:-*}"
 cd "${DEVICE_DIR}/tst"
 export LD_LIBRARY_PATH="${DEVICE_DIR}"
 export AWS_KVS_LOG_LEVEL="${AWS_KVS_LOG_LEVEL}"
+export ASAN_OPTIONS="${ASAN_OPTIONS}"
+export UBSAN_OPTIONS="${UBSAN_OPTIONS}"
 
 echo "=== Test run started: $(date) ==="
 echo "Filter: ${GTEST_FILTER}"

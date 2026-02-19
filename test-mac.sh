@@ -16,6 +16,8 @@ CMAKE="${CMAKE:-cmake}"
 SKIP_BUILD=false
 GTEST_FILTER="*"
 ASAN=false
+DEFAULT_ASAN_OPTIONS="halt_on_error=0:detect_stack_use_after_return=1:alloc_dealloc_mismatch=1:strict_string_checks=1:max_free_fill_size=4096:detect_invalid_pointer_pairs=2"
+DEFAULT_UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -37,7 +39,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
     echo "=== Building for macOS arm64 ==="
     ASAN_FLAG=""
     if [[ "$ASAN" == true ]]; then
-        ASAN_FLAG="-DADDRESS_SANITIZER=ON"
+        ASAN_FLAG="-DADDRESS_SANITIZER=ON -DUNDEFINED_BEHAVIOR_SANITIZER=ON"
     fi
     ${CMAKE} -B "$BUILD_DIR" -S "$SCRIPT_DIR" \
         -DBUILD_TEST=ON \
@@ -60,8 +62,10 @@ done
 
 # ── Run tests ──────────────────────────────────────────────────────────
 if [[ "$ASAN" == true ]]; then
-    export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0:detect_stack_use_after_return=1:alloc_dealloc_mismatch=1:strict_string_checks=1:max_free_fill_size=4096:detect_invalid_pointer_pairs=2}"
+    export ASAN_OPTIONS="${ASAN_OPTIONS:-$DEFAULT_ASAN_OPTIONS}"
+    export UBSAN_OPTIONS="${UBSAN_OPTIONS:-$DEFAULT_UBSAN_OPTIONS}"
     echo "ASAN_OPTIONS=${ASAN_OPTIONS}"
+    echo "UBSAN_OPTIONS=${UBSAN_OPTIONS}"
 fi
 
 echo ""

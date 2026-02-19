@@ -48,6 +48,8 @@ SERIAL=""
 ABI="arm64-v8a"
 ABI_SET=false
 ASAN=false
+DEFAULT_ASAN_OPTIONS="halt_on_error=0:detect_leaks=0:verify_asan_link_order=0:detect_stack_use_after_return=1:alloc_dealloc_mismatch=1:strict_string_checks=1:max_free_fill_size=4096:detect_invalid_pointer_pairs=2"
+DEFAULT_UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -129,7 +131,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
     echo "=== Building for Android ${ABI} ==="
     ASAN_FLAG=""
     if [[ "$ASAN" == true ]]; then
-        ASAN_FLAG="-DADDRESS_SANITIZER=ON"
+        ASAN_FLAG="-DADDRESS_SANITIZER=ON -DUNDEFINED_BEHAVIOR_SANITIZER=ON"
     fi
     cmake -B "$BUILD_DIR" -S "$SCRIPT_DIR" \
         -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK}/build/cmake/android.toolchain.cmake" \
@@ -151,6 +153,24 @@ adb_cmd shell mkdir -p "${DEVICE_DIR}/tst"
 adb_cmd push "${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test" "${DEVICE_DIR}/tst/"
 adb_cmd shell chmod +x "${DEVICE_DIR}/tst/webrtc_client_test"
 
+if [[ "$ASAN" == true ]]; then
+    echo "=== Pushing ASan runtime library ==="
+    # Map Android ABI to clang target arch
+    case "$ABI" in
+        arm64-v8a)   ASAN_ARCH="aarch64" ;;
+        armeabi-v7a) ASAN_ARCH="arm" ;;
+        x86_64)      ASAN_ARCH="x86_64" ;;
+        x86)         ASAN_ARCH="i686" ;;
+        *)           echo "ERROR: Unknown ABI '${ABI}' for ASan"; exit 1 ;;
+    esac
+    ASAN_LIB=$(find "${ANDROID_NDK}/toolchains/llvm/prebuilt" -name "libclang_rt.asan-${ASAN_ARCH}-android.so" | head -1)
+    if [[ -z "$ASAN_LIB" ]]; then
+        echo "ERROR: Could not find ASan runtime for ${ASAN_ARCH} in NDK."
+        exit 1
+    fi
+    adb_cmd push "$ASAN_LIB" "${DEVICE_DIR}/"
+fi
+
 echo "=== Pushing sample data ==="
 adb_cmd shell mkdir -p "${DEVICE_DIR}/samples"
 for dir in h264SampleFrames h265SampleFrames opusSampleFrames girH264 bbbH264; do
@@ -167,11 +187,18 @@ adb_cmd shell chmod +x "${DEVICE_DIR}/run-tests-on-device.sh"
 
 TEST_LOG="${BUILD_DIR}/test-output-${SERIAL}.log"
 
+if [[ "$ASAN" == true ]]; then
+    ASAN_OPTIONS="${ASAN_OPTIONS:-$DEFAULT_ASAN_OPTIONS}"
+    UBSAN_OPTIONS="${UBSAN_OPTIONS:-$DEFAULT_UBSAN_OPTIONS}"
+    echo "ASAN_OPTIONS=${ASAN_OPTIONS}"
+    echo "UBSAN_OPTIONS=${UBSAN_OPTIONS}"
+fi
+
 echo ""
 echo "=== Running tests (log: ${TEST_LOG}) ==="
 echo ""
 set +e
-adb_cmd shell "AWS_KVS_LOG_LEVEL='${AWS_KVS_LOG_LEVEL:-}' ${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'" | tee "$TEST_LOG"
+adb_cmd shell "AWS_KVS_LOG_LEVEL='${AWS_KVS_LOG_LEVEL:-}' ASAN_OPTIONS='${ASAN_OPTIONS:-}' UBSAN_OPTIONS='${UBSAN_OPTIONS:-}' ${DEVICE_DIR}/run-tests-on-device.sh '${GTEST_FILTER}'" | tee "$TEST_LOG"
 TEST_EXIT=${PIPESTATUS[0]}
 set -e
 
