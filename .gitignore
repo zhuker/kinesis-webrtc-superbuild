@@ -10,3 +10,4 @@ android-test-app/.gradle
 claude_plans
 *.log
 logs
+browser-test/node_modules

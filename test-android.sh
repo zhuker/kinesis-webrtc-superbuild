@@ -205,4 +205,30 @@ set -e
 echo ""
 echo "Log saved to ${TEST_LOG}"
 
+# ── Symbolize ASan/UBSan stack traces offline ────────────────────────
+if [[ "$ASAN" == true && $TEST_EXIT -ne 0 ]]; then
+    HOST_BINARY="${BUILD_DIR}/amazon-kinesis-video-streams-webrtc-sdk-c/tst/webrtc_client_test"
+    LLVM_SYMBOLIZER="${ANDROID_NDK}/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-symbolizer"
+    if [[ ! -x "$LLVM_SYMBOLIZER" ]]; then
+        # Try linux host
+        LLVM_SYMBOLIZER="${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-symbolizer"
+    fi
+    if [[ -x "$LLVM_SYMBOLIZER" && -f "$HOST_BINARY" ]]; then
+        echo ""
+        echo "=== Symbolizing stack traces ==="
+        # Extract offsets from ASan frames like: #0 0x... (/.../webrtc_client_test+0xOFFSET)
+        # and symbolize them using the unstripped host binary
+        grep -oE 'webrtc_client_test\+0x[0-9a-fA-F]+' "$TEST_LOG" | sort -u | while read -r match; do
+            offset="0x${match#*+0x}"
+            result=$("$LLVM_SYMBOLIZER" --obj="$HOST_BINARY" "$offset" 2>/dev/null | head -2)
+            if [[ -n "$result" ]]; then
+                echo "  ${match#*+}  ${result}" | tr '\n' ' '
+                echo ""
+            fi
+        done
+    else
+        echo "WARN: Cannot symbolize — llvm-symbolizer or unstripped binary not found."
+    fi
+fi
+
 exit $TEST_EXIT
