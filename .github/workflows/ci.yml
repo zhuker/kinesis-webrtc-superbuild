@@ -170,3 +170,24 @@ jobs:
       - name: Stop emulator
         if: always()
         run: bash ./emulator.sh stop --avd "firefly-test-arm64" || true
+
+  ci-pass:
+    name: CI passed
+    if: always()
+    needs:
+      - test-mac
+      - test-mac-asan
+      - test-docker
+      - test-docker-asan
+      - test-docker-tsan
+      - test-android
+      - test-android-app
+      - test-android-asan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" || "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs failed or were cancelled"
+            exit 1
+          fi
