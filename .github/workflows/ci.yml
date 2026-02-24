@@ -134,6 +134,19 @@ jobs:
       - name: Build and test with TSan
         run: bash ./test-docker.sh --tsan
 
+  test-browser:
+    name: Browser interop (macOS)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Build and run browser tests
+        run: bash ./scripts/test-browser.sh
+
   test-docker-filc:
     if: false # disabled for now
     name: Linux amd64 (fil-c, Docker)
@@ -183,6 +196,7 @@ jobs:
       - test-android
       - test-android-app
       - test-android-asan
+      - test-browser
     runs-on: ubuntu-latest
     steps:
       - name: Check results
