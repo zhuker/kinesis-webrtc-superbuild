@@ -12,6 +12,7 @@ option(ENABLE_SIGNALING      "Enable AWS signaling client (requires libwebsocket
 option(ENABLE_KVS_THREADPOOL "Enable KVS thread pool in signaling"                   OFF)
 option(BUILD_TEST            "Build WebRTC SDK tests"                                OFF)
 option(BUILD_BENCHMARK       "Build WebRTC SDK benchmarks"                           OFF)
+option(BUILD_BROWSER_TEST    "Build DataChannel browser interop test server"         OFF)
 option(ENABLE_AWS_SDK_IN_TESTS "Enable AWS SDK in tests (requires AWS C++ SDK)"      OFF)
 
 set(BUILD_OPENSSL_PLATFORM "" CACHE STRING "OpenSSL target platform for cross-compilation")
@@ -197,19 +198,7 @@ else()
 endif()
 
 # =============================================================================
-# 2. usrsctp  (add_subdirectory)
-# =============================================================================
-set(sctp_werror    OFF CACHE BOOL "" FORCE)
-set(sctp_build_programs OFF CACHE BOOL "" FORCE)
-
-add_subdirectory(usrsctp)
-
-# Expose usrsctp.h globally – the WebRTC SDK's Include_i.h includes it even in
-# targets that don't link against usrsctp (e.g. kvsWebrtcSignalingClient).
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/usrsctp/usrsctplib")
-
-# =============================================================================
-# 3. jsmn  (built directly – no patch needed)
+# 2. jsmn  (built directly – no patch needed)
 # =============================================================================
 add_library(jsmn STATIC "${JSMN_SRC_DIR}/jsmn.c" "${JSMN_SRC_DIR}/jsmn.h")
 target_include_directories(jsmn PUBLIC "${JSMN_SRC_DIR}")
@@ -381,7 +370,6 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/amazon-kinesis-video-streams-pr
 # This lets add_subdirectory work without modifying the SDK's CMakeLists.txt.
 # find_library stores results in CACHE; pre-setting them skips the search.
 set(SRTP_LIBRARIES             srtp2    CACHE STRING "Pre-set by superbuild" FORCE)
-set(Usrsctp                    usrsctp  CACHE STRING "Pre-set by superbuild" FORCE)
 if(ENABLE_SIGNALING)
   set(LIBWEBSOCKETS_LIBRARIES    websockets CACHE STRING "Pre-set by superbuild" FORCE)
 endif()
@@ -406,7 +394,20 @@ if(UNIX AND NOT APPLE)
 endif()
 
 # =============================================================================
-# 9. Android JNI Test Library  (shared lib for instrumented tests)
+# 9. DataChannel Test Server  (Puppeteer browser interop tests)
+# =============================================================================
+if(BUILD_BROWSER_TEST AND ENABLE_DATA_CHANNEL)
+  add_executable(dcTestServer
+      "${CMAKE_CURRENT_SOURCE_DIR}/browser-test/dcTestServer.cpp")
+  target_include_directories(dcTestServer PRIVATE
+      "${WEBRTC_SDK_SRC_DIR}/samples"
+      "${WEBRTC_SDK_SRC_DIR}/src/include")
+  target_link_libraries(dcTestServer kvsWebrtcClient kvspicUtils)
+  set_target_properties(dcTestServer PROPERTIES CXX_STANDARD 17)
+endif()
+
+# =============================================================================
+# 10. Android JNI Test Library  (shared lib for instrumented tests)
 # =============================================================================
 if(BUILD_ANDROID_JNI_TEST AND CMAKE_SYSTEM_NAME STREQUAL "Android" AND BUILD_TEST)
   set(WEBRTC_TST_DIR "${WEBRTC_SDK_SRC_DIR}/tst")
